@@ -1,12 +1,15 @@
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from .models import Payment  # 👈 modelni chaqirishni unutmang
-import hashlib, json
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from rest_framework import status
+from .models import Payment
+import hashlib
 
-@csrf_exempt
-def fake_click(request):
-    if request.method == "POST":
-        data = request.POST
+class FakeClickAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        data = request.data
         click_trans_id = data.get("click_trans_id", "123456")
         service_id = data.get("service_id", "1")
         order_id = data.get("merchant_trans_id", "ORDER123")
@@ -16,7 +19,6 @@ def fake_click(request):
         sign_string = f"{click_trans_id}{service_id}{fake_secret}{order_id}{amount}"
         sign = hashlib.md5(sign_string.encode()).hexdigest()
 
-        # ✅ Yangi fake payment yozamiz
         Payment.objects.create(
             click_trans_id=click_trans_id,
             merchant_trans_id=order_id,
@@ -26,30 +28,28 @@ def fake_click(request):
             error_note="Test click success ✅"
         )
 
-        return JsonResponse({
+        return Response({
             "click_trans_id": click_trans_id,
             "merchant_trans_id": order_id,
             "merchant_confirm_id": "FAKE_CONFIRM_ID",
             "sign_string": sign,
             "error": 0,
             "error_note": "Test click success ✅"
-        })
+        }, status=status.HTTP_201_CREATED)
 
-    return JsonResponse({"error": -1, "error_note": "Invalid method"}, status=405)
+class FakePaymeAPIView(APIView):
+    permission_classes = [AllowAny]
 
-@csrf_exempt
-def fake_payme(request):
-    if request.method == "POST":
+    def post(self, request):
         try:
-            body = json.loads(request.body)
-            method = body.get("method")
+            method = request.data.get("method")
 
             if method == "CheckPerformTransaction":
-                return JsonResponse({"result": {"allow": True}})
+                return Response({"result": {"allow": True}})
 
             elif method == "CreateTransaction":
-                click_trans_id = body.get("click_trans_id", "PM123")
-                merchant_trans_id = body.get("merchant_trans_id", "ORDER_PM")
+                click_trans_id = request.data.get("click_trans_id", "PM123")
+                merchant_trans_id = request.data.get("merchant_trans_id", "ORDER_PM")
                 merchant_confirm_id = "PM_CONFIRM_1"
                 sign_string = "fake_sign_pm"
                 error = 0
@@ -64,7 +64,7 @@ def fake_payme(request):
                     error_note=error_note
                 )
 
-                return JsonResponse({
+                return Response({
                     "result": {
                         "transaction": "FAKE_TXN",
                         "state": 1,
@@ -73,11 +73,9 @@ def fake_payme(request):
                 })
 
             elif method == "PerformTransaction":
-                return JsonResponse({"result": {"state": 2}})
+                return Response({"result": {"state": 2}})
 
-            return JsonResponse({"error": {"message": "Unknown method"}}, status=400)
+            return Response({"error": {"message": "Unknown method"}}, status=400)
 
-        except json.JSONDecodeError:
-            return JsonResponse({"error": {"message": "Invalid JSON"}}, status=400)
-
-    return JsonResponse({"error": {"message": "Invalid method"}}, status=405)
+        except Exception:
+            return Response({"error": {"message": "Invalid JSON"}}, status=400)

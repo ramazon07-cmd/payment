@@ -1,7 +1,7 @@
 from django.urls import path
-from .views import fake_click, fake_payme
+from .views import FakeClickAPIView, FakePaymeAPIView
 
 urlpatterns = [
-    path("click/", fake_click),
-    path("payme/", fake_payme),
+    path("click/", FakeClickAPIView.as_view(), name="fake-click"),
+    path("payme/", FakePaymeAPIView.as_view(), name="fake-payme"),
 ]
